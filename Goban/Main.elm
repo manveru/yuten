@@ -200,7 +200,7 @@ hasFreedom model stoneToBePlaced =
         Just stone ->
             if stone.color == NeutralStone then
                 let
-                    freedoms =
+                    ( freedoms, _ ) =
                         freedomCount model stoneToBePlaced.color (Set.fromList [ stone.point ]) stone.point
                 in
                 freedoms >= 1
@@ -208,34 +208,42 @@ hasFreedom model stoneToBePlaced =
                 False
 
 
-freedomCount : Model -> StoneColor -> Set.Set Point -> Point -> Int
+freedomCount : Model -> StoneColor -> Set.Set Point -> Point -> ( Int, Set.Set Point )
 freedomCount model color seen point =
     List.foldl
         (\fun ->
             \sum ->
+                let
+                    ( count, allSeen ) =
+                        sum
+                in
                 case fun model point of
                     Nothing ->
-                        sum
+                        ( count, allSeen )
 
                     Just stone ->
                         let
                             newSeen =
-                                Set.insert stone.point seen
+                                Set.insert stone.point allSeen
                         in
                         case stone.color of
                             NeutralStone ->
-                                if Set.member stone.point seen then
-                                    sum
+                                if Set.member stone.point allSeen then
+                                    ( count, allSeen )
                                 else
-                                    sum + 1
+                                    ( count + 1, allSeen )
 
                             _ ->
-                                if stone.color == color && Set.member stone.point seen /= True then
-                                    sum + freedomCount model color newSeen stone.point
+                                if stone.color == color && Set.member stone.point allSeen /= True then
+                                    let
+                                        ( subCount, subSeen ) =
+                                            freedomCount model color newSeen stone.point
+                                    in
+                                    ( count + subCount, Set.union allSeen subSeen )
                                 else
-                                    sum
+                                    ( count, allSeen )
         )
-        0
+        ( 0, seen )
         [ nPos, ePos, sPos, wPos ]
 
 
@@ -363,13 +371,15 @@ upForCapture model captorColor point =
                                 if stone.color == captorColor then
                                     captured
                                 else if
-                                    Debug.log "fredomCount"
-                                        (freedomCount
-                                            model
-                                            (invertColor captorColor)
-                                            (Set.fromList [ stone.point ])
-                                            stone.point
-                                        )
+                                    let
+                                        ( count, _ ) =
+                                            freedomCount
+                                                model
+                                                (invertColor captorColor)
+                                                (Set.fromList [ stone.point ])
+                                                stone.point
+                                    in
+                                    count
                                         == 1
                                 then
                                     Set.union captured
@@ -455,13 +465,27 @@ boardStyle =
     [ ( "display", "flex" )
     , ( "justify-content", "center" )
     , ( "align-items", "center" )
-    , ( "width", "100%" )
-    , ( "height", "100%" )
+    , ( "width", "90vw" )
+    , ( "max-width", "90vw" )
+    , ( "height", "90vh" )
+    , ( "max-height", "90vh" )
+    ]
+
+
+wrapStyle : List ( String, String )
+wrapStyle =
+    [ ( "display", "flex" )
+    , ( "justify-content", "center" )
+    , ( "align-items", "center" )
+    , ( "width", "100vw" )
+    , ( "height", "100vh" )
     ]
 
 
 view : Model -> Html Msg
 view model =
-    div [ style boardStyle ]
-        [ Goban.Board.view model
+    div [ style wrapStyle ]
+        [ div [ style boardStyle ]
+            [ Goban.Board.view model
+            ]
         ]

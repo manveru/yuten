@@ -168,7 +168,8 @@ view model =
     svg
         [ viewBox "0 0 1000 1000"
         , preserveAspectRatio "xMinYMin meet"
-        , height "100vh"
+        , width "100%"
+        , height "100%"
         ]
         ([ boardBackground
          , defs []
