@@ -9,6 +9,7 @@ import Set
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Events exposing (onClick, onMouseOut, onMouseOver)
+import Svg.Lazy exposing (lazy)
 
 
 border =
@@ -50,8 +51,16 @@ stoneRadiusInt gridSize =
     let
         radius =
             round <| innerSize / toFloat gridSize
+
+        factor =
+            case gridSize of
+                9 ->
+                    1.9
+
+                _ ->
+                    2.0
     in
-    round <| toFloat radius / 2.2
+    round <| toFloat radius / factor
 
 
 stoneRadius : Int -> String
@@ -68,20 +77,20 @@ hoshiRadius gridSize =
     toString <| round <| toFloat radius / 13
 
 
-stoneColor2Hex : StoneColor -> Bool -> StoneColor -> ( String, String, String, String )
+stoneColor2Hex : StoneColor -> Bool -> StoneColor -> String
 stoneColor2Hex currentPlayer hovered stoneColor =
     case stoneColor of
         BlackStone ->
-            ( "url(#blackGradient)", "url(#shineGradient)", "url(#unshineGradient)", "url(#shadowGradient)" )
+            "#000"
 
         WhiteStone ->
-            ( "url(#whiteGradient)", "url(#shineGradient)", "url(#unshineGradient)", "url(#shadowGradient)" )
+            "#aaa"
 
         NeutralStone ->
             if hovered then
                 stoneColor2Hex NeutralStone hovered currentPlayer
             else
-                ( "#00000000", "#00000000", "#00000000", "#00000000" )
+                "#00000000"
 
 
 stone : Model -> Stone -> Svg Msg
@@ -124,7 +133,7 @@ stone model stone =
             , r <| stoneRadius gridSize
             ]
 
-        ( stoneGradient, shineGradient, unshineGradient, shadowGradient ) =
+        stoneGradient =
             stoneColor2Hex model.currentPlayer
                 (model.hoveredStone == ( x, y ))
                 stone.color
@@ -135,29 +144,23 @@ stone model stone =
             , onMouseOut (StoneHover ( -1, -1 ))
             , onClick (StoneClick ( x, y ))
             ]
-            [ circle (base ++ [ fill stoneGradient ]) []
+            [ circle
+                (base
+                    ++ [ fill stoneGradient
+                       , Svg.Attributes.filter "url(#lighting1)"
+                       ]
+                )
+                []
             , removedMarker model wasRemoved stone
             ]
     else
-        g
-            []
-            [ ellipse
-                [ cx <| toString <| xPos - 7
-                , cy <| toString <| yPos + 1
-                , rx <| toString <| (toFloat <| stoneRadiusInt gridSize) * 1.25
-                , ry <| toString <| (toFloat <| stoneRadiusInt gridSize) * 1.1
-                , fill shadowGradient
-                , transform <| "rotate(45 " ++ calcOffset gridSize x ++ "," ++ calcOffset gridSize y ++ ")"
-                ]
-                []
-            , circle (base ++ [ fill stoneGradient ]) []
-            , ellipse
-                [ cx <| toString <| xPos - 15
-                , cy <| toString <| yPos + 10
-                , rx <| toString <| (toFloat <| stoneRadiusInt gridSize) * 1.0
-                , ry <| toString <| (toFloat <| stoneRadiusInt gridSize) * 1.0
-                , fill shineGradient
-                ]
+        g []
+            [ circle
+                (base
+                    ++ [ fill stoneGradient
+                       , Svg.Attributes.filter "url(#lighting1)"
+                       ]
+                )
                 []
             , placedMarker model wasPlaced stone
             ]
@@ -165,46 +168,94 @@ stone model stone =
 
 view : Model -> Html.Html Msg
 view model =
-    svg
-        [ viewBox "0 0 1000 1000"
-        , preserveAspectRatio "xMinYMin meet"
-        , width "100%"
-        , height "100%"
-        ]
-        ([ boardBackground
-         , defs []
-            [ radialGradient [ id "unshineGradient", cx "0.9", cy "0.25" ]
-                [ stop [ offset "0%", stopColor "#00000066" ] []
-                , stop [ offset "100%", stopColor "#00000000" ] []
+    lazy
+        (\model ->
+            svg
+                [ viewBox "0 0 1000 1000"
+                , preserveAspectRatio "xMinYMin meet"
+                , width "100%"
+                , height "100%"
                 ]
-            , radialGradient [ id "shadowGradient", cx "0.5", cy "0.5" ]
-                [ stop [ offset "0%", stopColor "#000000ff" ] []
-                , stop [ offset "40%", stopColor "#000000ff" ] []
-                , stop [ offset "100%", stopColor "#00000011" ] []
-                ]
-            , radialGradient [ id "whiteGradient", fx "0.75", fy "0.75" ]
-                [ stop [ offset "0%", stopColor "#ffffff" ] []
-                , stop [ offset "100%", stopColor "#a0a0a0", stopOpacity "1" ] []
-                ]
-            , radialGradient [ id "blackGradient", fx "0.75", fy "0.75" ]
-                [ stop [ offset "0%", stopColor "#a0a0a0" ] []
-                , stop [ offset "100%", stopColor "#000000", stopOpacity "0.9" ] []
-                ]
-            , linearGradient [ id "boardGradient", fx "0.5", fy "1", gradientTransform "rotate(45 0,0)" ]
-                [ stop [ offset "0%", stopColor "#df9d25", stopOpacity "0.5" ] []
-                , stop [ offset "90%", stopColor "#dfc28d", stopOpacity "0.5" ] []
-                , stop [ offset "100%", stopColor "#dfd0b3", stopOpacity "0.5" ] []
-                ]
-            ]
-         ]
-            ++ horizontalLines model
-            ++ horizontalLabels model
-            ++ verticalLines model
-            ++ verticalLabels model
-            ++ hoshis model
-            ++ boardShine
-            ++ stones model
+                ([ boardBackground
+                 , defs []
+                    [ linearGradient [ id "boardGradient", fx "0.5", fy "1", gradientTransform "rotate(45 0,0)" ]
+                        [ stop [ offset "0%", stopColor "#df9d25", stopOpacity "0.5" ] []
+                        ]
+                    , Svg.filter
+                        [ id "lighting1", filterUnits "userSpaceOnUse", x "0%", y "0%", width "110%", height "110%" ]
+                        [ feGaussianBlur [ in_ "SourceAlpha", result "shadowBlur", stdDeviation "5" ] []
+                        , feOffset [ in_ "shadowBlur", result "shadow", dx "9", dy "9" ] []
+                        , feGaussianBlur [ in_ "SourceAlpha", result "lightningBlur", stdDeviation "10" ] []
+                        , feSpecularLighting [ in_ "lightningBlur", result "specOut", surfaceScale "10", specularConstant "1", specularExponent "50", lightingColor "#aaa" ]
+                            [ fePointLight [ y "500", x "500", z "250" ] []
+                            ]
+                        , feComposite
+                            [ in_ "specOut", in2 "SourceAlpha", result "specOut", operator "in" ]
+                            []
+                        , feGaussianBlur [ in_ "specOut", result "specOut", stdDeviation "2" ] []
+                        , feComposite
+                            [ in_ "SourceGraphic", in2 "specOut", result "litPaint", operator "arithmetic", k1 "1", k2 "1", k3 "1", k4 "0" ]
+                            []
+                        , feMerge []
+                            [ feMergeNode [ in_ "shadow" ] []
+                            , feMergeNode [ in_ "litPaint" ] []
+                            ]
+                        ]
+                    , Svg.filter [ id "lighting" ]
+                        [ feDiffuseLighting [ in_ "SourceGraphic", result "light", lightingColor "#fff" ]
+                            [ fePointLight [ x "10000", y "10000", z "20000" ] []
+                            ]
+                        , feComposite
+                            [ in_ "SourceGraphic"
+                            , in2 "light"
+                            , operator "arithmetic"
+                            , k1 "1"
+                            , k2 "0"
+                            , k3 "0"
+                            , k4 "0"
+                            ]
+                            []
+                        ]
+                    , Svg.filter [ id "sun" ]
+                        [ feSpecularLighting
+                            [ result "sun"
+                            , specularConstant "1.0"
+                            , specularExponent "100"
+                            , lightingColor "#fff"
+                            ]
+                            [ fePointLight
+                                [ x "1000"
+                                , y "1000"
+                                , z "1000"
+                                , pointsAtX "0"
+                                , pointsAtY "0"
+                                , pointsAtZ "0"
+                                ]
+                                []
+                            ]
+                        , feComposite
+                            [ in_ "SourceGraphic"
+                            , in2 "sun"
+                            , operator "atop"
+                            , k1 "1"
+                            , k2 "1"
+                            , k3 "1"
+                            , k4 "1"
+                            ]
+                            []
+                        ]
+                    ]
+                 ]
+                    ++ horizontalLines model
+                    ++ horizontalLabels model
+                    ++ verticalLines model
+                    ++ verticalLabels model
+                    ++ hoshis model
+                    ++ boardShine
+                    ++ stones model
+                )
         )
+        model
 
 
 placedMarker model show stone =
@@ -325,6 +376,8 @@ boardBackground =
         , rx "0"
         , ry "0"
         , fill "#dfa335"
+
+        -- , Svg.Attributes.style "filter:url(#sun)"
         ]
         []
 
@@ -425,4 +478,10 @@ stones model =
         values =
             Dict.values model.board.stones
     in
-    List.map (\v -> stone model v) values
+    [ g
+        []
+        (List.map
+            (\v -> stone model v)
+            values
+        )
+    ]

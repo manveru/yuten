@@ -12,3 +12,5 @@ type Msg
     | StoneHover Point
     | StoneJitter Int
     | Replay (List Point)
+    | ClickPass
+    | ClickUndo

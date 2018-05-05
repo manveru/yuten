@@ -3,10 +3,11 @@ module Main exposing (..)
 import Array
 import Dict
 import Goban.Board
-import Goban.Models exposing (Model, Stone, StoneColor(..), emptyBoard, invertColor)
+import Goban.Models exposing (History, Model, Stone, StoneColor(..), emptyBoard, invertColor)
 import Goban.Msgs exposing (..)
-import Html exposing (Html, button, div, text)
-import Html.Attributes exposing (style)
+import Html exposing (Html, button, div, input, text)
+import Html.Attributes exposing (style, type_, value)
+import Html.Events exposing (onClick)
 import Set
 import Task
 
@@ -30,11 +31,11 @@ init : ( Model, Cmd Msg )
 init =
     ( { hoveredStone = ( -1, -1 )
       , clickedStone = ( -1, -1 )
-      , board = emptyBoard 19
+      , board = emptyBoard 9
       , moves = Array.fromList []
       , removed = Array.fromList []
-      , previousBoard = emptyBoard 9
       , currentPlayer = BlackStone
+      , history = []
       }
     , Task.succeed (Replay initialMoves) |> Task.perform identity
     )
@@ -42,29 +43,30 @@ init =
 
 initialMoves : List Point
 initialMoves =
-    [-- ( 5, 5 )
-     -- , ( 6, 5 )
-     -- , ( 6, 6 )
-     -- , ( 7, 6 )
-     -- , ( 7, 7 )
-     -- , ( 8, 7 )
-     -- , ( 8, 8 )
-     -- , ( 9, 8 )
-     -- , ( 9, 9 )
-     -- , ( 8, 6 )
-     -- , ( 9, 6 )
-     -- , ( 9, 5 )
-     -- , ( 7, 5 )
-     -- , ( 6, 4 )
-     -- , ( 7, 4 )
-     -- , ( 7, 3 )
-     -- , ( 8, 4 )
-     -- , ( 8, 3 )
-     -- , ( 9, 4 )
-     -- , ( 9, 3 )
-     -- , ( 8, 5 )
-     -- , ( 9, 6 )
-     -- , ( 8, 5 )
+    [ ( 5, 5 )
+
+    -- , ( 6, 5 )
+    -- , ( 6, 6 )
+    -- , ( 7, 6 )
+    -- , ( 7, 7 )
+    -- , ( 8, 7 )
+    -- , ( 8, 8 )
+    -- , ( 9, 8 )
+    -- , ( 9, 9 )
+    -- , ( 8, 6 )
+    -- , ( 9, 6 )
+    -- , ( 9, 5 )
+    -- , ( 7, 5 )
+    -- , ( 6, 4 )
+    -- , ( 7, 4 )
+    -- , ( 7, 3 )
+    -- , ( 8, 4 )
+    -- , ( 8, 3 )
+    -- , ( 9, 4 )
+    -- , ( 9, 3 )
+    -- , ( 8, 5 )
+    -- , ( 9, 6 )
+    -- , ( 8, 5 )
     ]
 
 
@@ -94,43 +96,26 @@ update msg model =
                         Just tail ->
                             ( setStone model point, Task.succeed (Replay tail) |> Task.perform identity )
 
+        ClickPass ->
+            ( pass model, Cmd.none )
 
-causeDisturbance : Model -> Point -> Model
-causeDisturbance model jitter =
-    case Array.get (Array.length model.moves - 1) model.moves of
+        ClickUndo ->
+            ( undo model, Cmd.none )
+
+
+pass : Model -> Model
+pass model =
+    { model | currentPlayer = invertColor model.currentPlayer }
+
+
+undo : Model -> Model
+undo model =
+    case List.head model.history of
         Nothing ->
             model
 
-        Just placedStone ->
-            let
-                movedStones =
-                    List.foldl
-                        (\fun ->
-                            \sum ->
-                                case fun model placedStone.point of
-                                    Nothing ->
-                                        sum
-
-                                    Just stone ->
-                                        let
-                                            ( jx, jy ) =
-                                                jitter
-
-                                            ( sx, sy ) =
-                                                stone.jitter
-                                        in
-                                        Dict.insert stone.point { stone | jitter = ( jx + sx, jy + sy ) } sum
-                        )
-                        Dict.empty
-                        [ nPos, ePos, sPos, wPos ]
-
-                newStones =
-                    Dict.union movedStones model.board.stones
-
-                newBoard =
-                    { stones = newStones, size = model.board.size }
-            in
-            { model | board = newBoard }
+        Just (Goban.Models.History oldModel) ->
+            oldModel
 
 
 setStone : Model -> Point -> Model
@@ -168,19 +153,24 @@ setStone model pos =
             else
                 BlackStone
 
-        newBoardIsOldBoard =
-            Array.length model.moves /= 0 && (model.previousBoard.stones == newBoard.stones)
+        isKO =
+            case List.head model.history of
+                Nothing ->
+                    False
+
+                Just (Goban.Models.History oldModel) ->
+                    model.board.stones == oldModel.board.stones
     in
-    if newBoardIsOldBoard then
+    if isKO then
         model
     else if willHaveFreedom || Set.size capturePositions > 0 then
         { model
             | clickedStone = pos
             , moves = Array.push newStone model.moves
             , removed = Array.push capturePositions model.removed
-            , previousBoard = model.board
             , board = newBoard
             , currentPlayer = newPlayer
+            , history = Goban.Models.History model :: model.history
         }
     else
         model
@@ -488,4 +478,65 @@ view model =
         [ div [ style boardStyle ]
             [ Goban.Board.view model
             ]
+        , controls model
         ]
+
+
+controls : Model -> Html Msg
+controls model =
+    div
+        [ style
+            [ ( "width", "15vw" )
+            , ( "background", "#eee" )
+            , ( "height", "100vh" )
+            ]
+        ]
+        [ input [ type_ "button", value "Pass", onClick ClickPass ] [ text "Pass" ]
+        , input [ type_ "button", value "Undo", onClick ClickUndo ] [ text "Undo" ]
+        , div []
+            [ text
+                (if model.currentPlayer == BlackStone then
+                    "Black to move"
+                 else
+                    "White to move"
+                )
+            ]
+        ]
+
+
+causeDisturbance : Model -> Point -> Model
+causeDisturbance model jitter =
+    case Array.get (Array.length model.moves - 1) model.moves of
+        Nothing ->
+            model
+
+        Just placedStone ->
+            let
+                movedStones =
+                    List.foldl
+                        (\fun ->
+                            \sum ->
+                                case fun model placedStone.point of
+                                    Nothing ->
+                                        sum
+
+                                    Just stone ->
+                                        let
+                                            ( jx, jy ) =
+                                                jitter
+
+                                            ( sx, sy ) =
+                                                stone.jitter
+                                        in
+                                        Dict.insert stone.point { stone | jitter = ( jx + sx, jy + sy ) } sum
+                        )
+                        Dict.empty
+                        [ nPos, ePos, sPos, wPos ]
+
+                newStones =
+                    Dict.union movedStones model.board.stones
+
+                newBoard =
+                    { stones = newStones, size = model.board.size }
+            in
+            { model | board = newBoard }

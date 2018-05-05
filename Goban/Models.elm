@@ -18,9 +18,13 @@ type alias Model =
     , moves : Array.Array Stone
     , removed : Array.Array (Set.Set Point)
     , board : Board
-    , previousBoard : Board
     , currentPlayer : StoneColor
+    , history : List History
     }
+
+
+type History
+    = History Model
 
 
 type alias Board =
